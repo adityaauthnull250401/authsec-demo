@@ -1,0 +1,102 @@
+name: authsec-demo-spire
+
+services:
+  # Official SPIRE 1.15 images run as uid/gid 1000. Docker creates named
+  # volumes as root, so a one-shot init container assigns only the four demo
+  # data/socket volumes before either daemon starts.
+  spire-init:
+    image: busybox:1.37.0
+    command:
+      - sh
+      - -c
+      - chown -R 1000:1000 /server-data /server-socket /agent-data /agent-socket
+    volumes:
+      - server-data:/server-data
+      - server-socket:/server-socket
+      - agent-data:/agent-data
+      - agent-socket:/agent-socket
+    networks: [spire]
+
+  spire-server:
+    image: ghcr.io/spiffe/spire-server:1.15.0
+    command: ["-config", "/opt/spire/conf/server/server.conf"]
+    restart: unless-stopped
+    depends_on:
+      spire-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./server.conf:/opt/spire/conf/server/server.conf:ro
+      - server-data:/opt/spire/data
+      - server-socket:/tmp/spire-server/private
+    networks: [spire]
+
+  spire-oidc:
+    image: ghcr.io/spiffe/oidc-discovery-provider:1.15.0
+    command: ["-config", "/opt/spire/conf/oidc/oidc.conf"]
+    restart: unless-stopped
+    depends_on: [spire-server]
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - ./oidc.conf:/opt/spire/conf/oidc/oidc.conf:ro
+      - server-socket:/tmp/spire-server/private:ro
+    networks: [spire]
+
+  spire-agent:
+    image: ghcr.io/spiffe/spire-agent:1.15.0
+    command:
+      - -config
+      - /opt/spire/conf/agent/agent.conf
+      - -joinToken
+      # spire-up.sh supplies a real one-time token on first boot. A visible
+      # invalid default keeps `compose down/config` and workload-only runs
+      # usable after the already-attested Agent is running.
+      - ${SPIRE_JOIN_TOKEN:-start-agent-via-scripts-spire-up}
+    restart: unless-stopped
+    depends_on:
+      spire-init:
+        condition: service_completed_successfully
+      spire-server:
+        condition: service_started
+    volumes:
+      - ./agent.conf:/opt/spire/conf/agent/agent.conf:ro
+      - ../.state/spire/bootstrap-bundle.pem:/opt/spire/conf/agent/bootstrap-bundle.pem:ro
+      - agent-data:/opt/spire/data
+      - agent-socket:/run/spire/sockets
+    networks: [spire]
+
+  # This image contains the actual pulled AuthSec SDK and the SPIRE CLI. It is
+  # intentionally given only the workload/LLM variables below—never the MCP
+  # server's introspection or GitHub App credentials.
+  release-reporter:
+    profiles: ["workload"]
+    build:
+      context: ..
+      dockerfile: spire/Dockerfile.workload
+    depends_on: [spire-agent]
+    # The Unix workload attestor resolves the peer PID via /proc. Joining only
+    # the Agent container's PID namespace makes that proof work across the
+    # Docker boundary without exposing the host PID namespace or Docker socket.
+    pid: "service:spire-agent"
+    environment:
+      AUTHSEC_ISSUER: ${AUTHSEC_ISSUER:-https://app.authsec.ai}
+      AUTHSEC_RESOURCE_URI: ${AUTHSEC_RESOURCE_URI:-https://mcp-demo.mcpauthz.com/mcp}
+      SPIFFE_CLIENT_ID: ${SPIFFE_CLIENT_ID:-}
+      SPIFFE_ID: ${SPIFFE_ID:-}
+      SPIRE_AGENT_SOCKET_PATH: /run/spire/sockets/agent.sock
+      DEMO_LLM_MODEL: ${DEMO_LLM_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - agent-socket:/run/spire/sockets:ro
+    networks: [spire]
+    entrypoint: ["demo-agent"]
+    command: ["run", "release-reporter"]
+
+networks:
+  spire:
+
+volumes:
+  server-data:
+  server-socket:
+  agent-data:
+  agent-socket:

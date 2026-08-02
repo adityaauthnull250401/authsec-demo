@@ -1,0 +1,10 @@
+.env
+.git
+.venv
+.state/*
+!.state/wheels/
+!.state/wheels/*.whl
+.secrets
+__pycache__
+*.pyc
+runbooks/recordings

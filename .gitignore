@@ -1,0 +1,19 @@
+.DS_Store
+.env
+.python-version
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Generated demo state. It can contain one-time credentials, user sessions,
+# token identifiers, and SPIRE bootstrap material.
+.secrets/
+.state/
+spire/.runtime/
+
+# Presenter recordings are intentionally local and can be very large.
+runbooks/recordings/
+

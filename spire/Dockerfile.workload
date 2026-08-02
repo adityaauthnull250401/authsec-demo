@@ -1,0 +1,22 @@
+FROM ghcr.io/spiffe/spire-agent:1.15.0 AS spire
+
+FROM python:3.12-slim
+
+COPY --from=spire /opt/spire/bin/spire-agent /usr/local/bin/spire-agent
+
+WORKDIR /workspace
+
+# Dependency resolution is frozen by uv.lock on the host. Keeping this layer
+# separate means rebuilding either local wheel does not redownload LangChain
+# and its transitive dependencies before every rehearsal.
+COPY .state/wheels/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY .state/wheels/*.whl /tmp/authsec-wheels/
+
+# Both wheels are built by spire-up.sh. The SDK wheel comes from the actual
+# pulled checkout and the application wheel freezes the exact demo code used
+# for this workload run; the container never resolves uv's host-only path.
+RUN pip install --no-cache-dir --no-deps /tmp/authsec-wheels/*.whl
+
+USER 0:0

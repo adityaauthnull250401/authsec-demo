@@ -1,0 +1,10 @@
+# Create a dedicated tunnel, copy this file to
+# ~/.cloudflared/authsec-spire-demo.yml, and replace both placeholders.
+tunnel: 1b643c08-9f41-41d3-b095-9ed3d9775635
+credentials-file: /Users/pc/.cloudflared/1b643c08-9f41-41d3-b095-9ed3d9775635.json
+
+ingress:
+  - hostname: spire-demo.mcpauthz.com
+    service: http://localhost:8443
+  - service: http_status:404
+

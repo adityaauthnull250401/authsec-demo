@@ -1,0 +1,377 @@
+<style>
+  :root {
+    --ground: #f6f8fc;
+    --panel: #ffffff;
+    --ink: #0f1729;
+    --muted: #5a6a86;
+    --hair: #dbe2ee;
+    --accent: #0891b2;
+    --accent-2: #6366f1;
+    --danger: #dc2626;
+    --danger-soft: #fef2f2;
+    --good: #059669;
+    --good-soft: #ecfdf5;
+    --shadow: 0 10px 40px -12px rgba(15,23,41,.18);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0a0e1a;
+      --panel: #101627;
+      --ink: #e9eefb;
+      --muted: #8b99b6;
+      --hair: #212a41;
+      --accent: #22d3ee;
+      --accent-2: #818cf8;
+      --danger: #f87171;
+      --danger-soft: #2a1416;
+      --good: #34d399;
+      --good-soft: #0c231c;
+      --shadow: 0 20px 60px -20px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f8fc; --panel: #fff; --ink: #0f1729; --muted: #5a6a86; --hair: #dbe2ee;
+    --accent: #0891b2; --accent-2: #6366f1; --danger: #dc2626; --danger-soft: #fef2f2;
+    --good: #059669; --good-soft: #ecfdf5; --shadow: 0 10px 40px -12px rgba(15,23,41,.18);
+  }
+  :root[data-theme="dark"] {
+    --ground: #0a0e1a; --panel: #101627; --ink: #e9eefb; --muted: #8b99b6; --hair: #212a41;
+    --accent: #22d3ee; --accent-2: #818cf8; --danger: #f87171; --danger-soft: #2a1416;
+    --good: #34d399; --good-soft: #0c231c; --shadow: 0 20px 60px -20px rgba(0,0,0,.6);
+  }
+
+  .deck {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, color-mix(in oklab, var(--accent) 12%, transparent), transparent 60%),
+      var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    cursor: default;
+  }
+
+  .stage { position: absolute; inset: 0; display: grid; place-items: center; padding: 6vh 8vw; }
+
+  .slide {
+    position: absolute; width: min(1000px, 84vw);
+    opacity: 0; visibility: hidden; transform: translateY(14px);
+    transition: opacity .45s ease, transform .45s ease, visibility .45s;
+    will-change: opacity, transform;
+  }
+  .slide.active { opacity: 1; visibility: visible; transform: none; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: .78rem; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 1.1rem;
+    display: inline-flex; align-items: center; gap: .55rem;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--accent); display: inline-block; }
+
+  h1 { font-size: clamp(2.4rem, 5.5vw, 4rem); line-height: 1.02; letter-spacing: -.02em;
+       margin: 0; font-weight: 680; text-wrap: balance; }
+  h2 { font-size: clamp(1.8rem, 4vw, 2.9rem); line-height: 1.05; letter-spacing: -.02em;
+       margin: 0 0 2rem; font-weight: 660; text-wrap: balance; }
+
+  .lede { font-size: clamp(1.05rem, 1.8vw, 1.4rem); color: var(--muted); line-height: 1.5;
+          max-width: 42ch; margin: 1.6rem 0 0; }
+
+  .hint { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-top: 2.6rem;
+          letter-spacing: .05em; opacity: .8; }
+  kbd { font-family: var(--mono); border: 1px solid var(--hair); border-bottom-width: 2px;
+        border-radius: 5px; padding: .05em .45em; color: var(--ink); background: var(--panel); }
+
+  /* flow diagram */
+  .flow { display: flex; align-items: center; gap: 0; margin: .4rem 0 2rem; flex-wrap: wrap; }
+  .node {
+    font-family: var(--mono); font-size: .82rem; padding: .7rem 1rem; border-radius: 10px;
+    border: 1px solid var(--hair); background: var(--panel); color: var(--ink);
+    box-shadow: var(--shadow); white-space: nowrap;
+  }
+  .node.dim { color: var(--muted); box-shadow: none; }
+  .node.key { border-color: color-mix(in oklab, var(--danger) 55%, var(--hair)); color: var(--danger); }
+  .node.brain { border-color: color-mix(in oklab, var(--accent) 60%, var(--hair));
+                color: var(--ink); box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent), var(--shadow); }
+  .conn { flex: 1 1 42px; min-width: 42px; height: 2px; position: relative;
+          background: linear-gradient(90deg, transparent, var(--hair) 20%, var(--hair) 80%, transparent);
+          margin: 0 .1rem; }
+  .conn::after { content: ""; position: absolute; right: 4px; top: 50%; width: 6px; height: 6px;
+                 border-top: 2px solid var(--hair); border-right: 2px solid var(--hair);
+                 transform: translateY(-50%) rotate(45deg); }
+  .conn span { position: absolute; top: -1.5rem; left: 50%; transform: translateX(-50%);
+               font-family: var(--mono); font-size: .68rem; color: var(--muted); white-space: nowrap; }
+  .conn.good { background: linear-gradient(90deg, transparent, color-mix(in oklab,var(--good) 50%, var(--hair)) 20%, color-mix(in oklab,var(--good) 50%, var(--hair)) 80%, transparent); }
+  .conn.good span { color: var(--good); }
+
+  .caption { color: var(--muted); font-size: .95rem; margin: -.6rem 0 2rem; }
+
+  /* revealing list */
+  .list { display: flex; flex-direction: column; gap: .7rem; margin: 0; padding: 0; list-style: none; }
+  .item {
+    display: flex; align-items: center; gap: .85rem; font-size: clamp(1rem, 1.7vw, 1.25rem);
+    padding: .55rem .2rem; color: var(--ink);
+  }
+  .item .mark {
+    flex: none; width: 1.7rem; height: 1.7rem; border-radius: 7px; display: grid; place-items: center;
+    font-weight: 700; font-size: .95rem;
+  }
+  .item.bad .mark { background: var(--danger-soft); color: var(--danger);
+                    border: 1px solid color-mix(in oklab, var(--danger) 30%, transparent); }
+  .item.ok .mark  { background: var(--good-soft); color: var(--good);
+                    border: 1px solid color-mix(in oklab, var(--good) 35%, transparent); }
+
+  /* equation build */
+  .rule { display: flex; flex-direction: column; gap: 1rem; }
+  .rule .ln { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+              font-size: clamp(1.05rem, 2vw, 1.5rem); }
+  .rule .ln b { font-weight: 640; }
+  .rule .ln code { font-family: var(--mono); font-size: .82em; color: var(--accent);
+                   background: color-mix(in oklab, var(--accent) 12%, transparent);
+                   padding: .2em .55em; border-radius: 6px; }
+  .result {
+    margin-top: 1.4rem; padding: 1.4rem 1.5rem; border-radius: 14px;
+    background: var(--panel); border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--hair));
+    box-shadow: var(--shadow); font-size: clamp(1.05rem, 1.9vw, 1.35rem); line-height: 1.45;
+  }
+  .result b { color: var(--accent); }
+
+  /* caller cards */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .card {
+    padding: 1.15rem 1.25rem; border-radius: 14px; border: 1px solid var(--hair);
+    background: var(--panel); box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 .35rem; font-size: 1.15rem; letter-spacing: -.01em; display: flex; gap: .6rem; align-items: center; }
+  .card h3 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
+  .card p { margin: 0; color: var(--muted); font-size: .98rem; line-height: 1.45; }
+  .card .tag { font-family: var(--mono); font-size: .72rem; color: var(--accent); letter-spacing: .04em; }
+  .footline { margin-top: 1.5rem; font-size: clamp(1.05rem, 1.9vw, 1.35rem); color: var(--ink); }
+  .footline b { color: var(--accent); }
+
+  .ask {
+    margin-top: 1.6rem; padding: 1.5rem 1.6rem; border-radius: 16px;
+    background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 16%, var(--panel)), var(--panel));
+    border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--hair));
+    font-size: clamp(1.15rem, 2.1vw, 1.6rem); line-height: 1.35; font-weight: 560; box-shadow: var(--shadow);
+  }
+  .escal { font-size: clamp(1.05rem, 1.9vw, 1.35rem); color: var(--muted); line-height: 1.5; }
+  .escal b { color: var(--ink); font-weight: 600; }
+
+  /* fragments */
+  .frag { opacity: 0; transform: translateY(12px); transition: opacity .4s ease, transform .4s ease; }
+  .frag.show { opacity: 1; transform: none; }
+
+  /* chrome */
+  .bar { position: absolute; left: 0; top: 0; height: 3px; background: var(--accent);
+         width: 0; transition: width .4s ease; z-index: 5; box-shadow: 0 0 12px var(--accent); }
+  .dots { position: absolute; bottom: 3.4vh; left: 50%; transform: translateX(-50%);
+          display: flex; gap: .5rem; z-index: 5; }
+  .dots button { width: 8px; height: 8px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+                 background: var(--hair); transition: all .25s ease; }
+  .dots button.on { background: var(--accent); width: 22px; border-radius: 4px; }
+  .foot { position: absolute; bottom: 3vh; left: 8vw; font-family: var(--mono); font-size: .72rem;
+          color: var(--muted); letter-spacing: .08em; text-transform: uppercase; z-index: 5; }
+  .count { position: absolute; bottom: 3vh; right: 8vw; font-family: var(--mono); font-size: .72rem;
+           color: var(--muted); letter-spacing: .06em; z-index: 5; font-variant-numeric: tabular-nums; }
+  .nav { position: absolute; bottom: 2.6vh; right: 8vw; display: none; }
+
+  .brand { position: absolute; top: 3.2vh; left: 8vw; font-family: var(--mono); font-size: .74rem;
+           letter-spacing: .18em; color: var(--muted); text-transform: uppercase; z-index: 5; }
+  .brand b { color: var(--ink); }
+
+  button.arrow-btn { position: absolute; bottom: 2.8vh; z-index: 6; background: var(--panel);
+    border: 1px solid var(--hair); color: var(--ink); width: 34px; height: 34px; border-radius: 9px;
+    cursor: pointer; font-size: 1rem; display: grid; place-items: center; box-shadow: var(--shadow); }
+  button.arrow-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .prev-b { right: calc(8vw + 44px); }
+  .next-b { right: 8vw; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide, .frag, .bar, .dots button { transition: opacity .01s; transform: none !important; }
+  }
+  @media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+    .flow { transform: scale(.9); transform-origin: left; }
+    .foot, .count { display: none; }
+  }
+</style>
+
+<div class="deck" id="deck">
+  <div class="bar" id="bar"></div>
+  <div class="brand"><b>AuthSec</b> &nbsp;·&nbsp; agentic identity</div>
+  <div class="stage" id="stage">
+
+    <!-- 1 TITLE -->
+    <section class="slide" data-title="Title">
+      <p class="eyebrow">Identity for AI agents</p>
+      <h1>Every call an agent makes<br>is an access decision.</h1>
+      <p class="lede frag">Today almost nobody treats it like one. AuthSec does — it gives every
+        caller a real identity and checks it on every tool call.</p>
+      <p class="hint frag">Press <kbd>→</kbd> or <kbd>space</kbd> to advance &nbsp;·&nbsp; <kbd>←</kbd> to go back</p>
+    </section>
+
+    <!-- 2 PROBLEM -->
+    <section class="slide" data-title="The problem">
+      <p class="eyebrow">The problem</p>
+      <h2>How agents reach tools today</h2>
+      <div class="flow">
+        <span class="node">AI agent</span>
+        <span class="conn"><span>static key</span></span>
+        <span class="node key">shared secret</span>
+        <span class="conn"></span>
+        <span class="node dim">MCP server</span>
+        <span class="conn"></span>
+        <span class="node dim">resources</span>
+      </div>
+      <p class="caption">The server sees a secret — not a <em>who</em>.</p>
+      <ul class="list">
+        <li class="item bad frag"><span class="mark">✕</span> No real identity on the caller</li>
+        <li class="item bad frag"><span class="mark">✕</span> Over-scoped, standing access</li>
+        <li class="item bad frag"><span class="mark">✕</span> No per-tool authorization</li>
+        <li class="item bad frag"><span class="mark">✕</span> No attribution when something happens</li>
+        <li class="item bad frag"><span class="mark">✕</span> No revocation without rotating keys everywhere</li>
+      </ul>
+    </section>
+
+    <!-- 3 SOLUTION -->
+    <section class="slide" data-title="The solution">
+      <p class="eyebrow">The solution</p>
+      <h2>AuthSec sits in front — the control plane</h2>
+      <div class="flow">
+        <span class="node">callers</span>
+        <span class="conn"></span>
+        <span class="node brain">AuthSec</span>
+        <span class="conn good"><span>scoped token</span></span>
+        <span class="node">protected MCP</span>
+        <span class="conn"></span>
+        <span class="node dim">resources</span>
+      </div>
+      <p class="caption">OAuth 2.1 / OIDC · RBAC · a native token engine.</p>
+      <ul class="list">
+        <li class="item ok frag"><span class="mark">✓</span> Every caller gets a first-class identity</li>
+        <li class="item ok frag"><span class="mark">✓</span> Tokens scoped to specific tools</li>
+        <li class="item ok frag"><span class="mark">✓</span> Resource-bound and short-lived</li>
+        <li class="item ok frag"><span class="mark">✓</span> Checked live on every call — revocable instantly</li>
+      </ul>
+    </section>
+
+    <!-- 4 HOW -->
+    <section class="slide" data-title="How it works">
+      <p class="eyebrow">How it works</p>
+      <h2>One rule, checked on every call</h2>
+      <div class="rule">
+        <div class="ln frag"><b>A tool requires a scope</b> <code>list_commits → commits:read</code></div>
+        <div class="ln frag"><b>A role grants scopes</b> <code>Reader → commits:read, repo:read</code></div>
+        <div class="ln frag"><b>An identity holds a role</b> <code>agent → Reader</code></div>
+        <div class="result frag">
+          <b>Access</b> = the identity carries the scope the tool needs — re-checked on
+          <b>every</b> call. Pull the grant and the next request dies, even on a token that hasn’t expired.
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 CALLERS -->
+    <section class="slide" data-title="One enforcement">
+      <p class="eyebrow">One enforcement</p>
+      <h2>Four ways to prove identity</h2>
+      <div class="grid">
+        <div class="card frag"><h3><span class="dot"></span>Person</h3>
+          <p>Signs in through their own tool — a browser login from Claude Code.</p></div>
+        <div class="card frag"><h3><span class="dot"></span>Service</h3>
+          <p>Authenticates with a <span class="tag">private key</span> — no shared secret to leak.</p></div>
+        <div class="card frag"><h3><span class="dot"></span>Workload</h3>
+          <p>No secret at all — a short-lived <span class="tag">SPIFFE</span> identity.</p></div>
+        <div class="card frag"><h3><span class="dot"></span>Delegated agent</h3>
+          <p>Acts for a named person — the delegation is visible in the token.</p></div>
+      </div>
+      <p class="footline frag">Different doors. The <b>same scope check</b> on every one.</p>
+    </section>
+
+    <!-- 6 CLOSE -->
+    <section class="slide" data-title="See it live">
+      <p class="eyebrow">See it live</p>
+      <h2>Let me show you the tokens.</h2>
+      <p class="escal frag">A person · a service · a workload · a delegated agent — then I
+        <b>revoke, live</b>, and the next call dies.</p>
+      <div class="ask frag">It’s running today. What would it take to put it in front of your agents?</div>
+    </section>
+
+  </div>
+
+  <div class="dots" id="dots"></div>
+  <div class="foot" id="foot"></div>
+  <div class="count" id="count"></div>
+  <button class="arrow-btn prev-b" id="prevb" aria-label="Previous">‹</button>
+  <button class="arrow-btn next-b" id="nextb" aria-label="Next">›</button>
+</div>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+    var cur = 0, step = 0;
+    var bar = document.getElementById("bar");
+    var foot = document.getElementById("foot");
+    var count = document.getElementById("count");
+    var dotsWrap = document.getElementById("dots");
+
+    var dots = slides.map(function (s, i) {
+      var b = document.createElement("button");
+      b.setAttribute("aria-label", "Go to slide " + (i + 1));
+      b.addEventListener("click", function (e) { e.stopPropagation(); go(i, 0); });
+      dotsWrap.appendChild(b);
+      return b;
+    });
+
+    function frags(s) { return Array.prototype.slice.call(s.querySelectorAll(".frag")); }
+
+    function render(revealAll) {
+      slides.forEach(function (s, i) {
+        s.classList.toggle("active", i === cur);
+      });
+      var s = slides[cur];
+      var fr = frags(s);
+      fr.forEach(function (f, i) { f.classList.toggle("show", revealAll ? true : i < step); });
+      bar.style.width = ((cur + (fr.length ? step / fr.length : 1)) / slides.length * 100) + "%";
+      dots.forEach(function (d, i) { d.classList.toggle("on", i === cur); });
+      foot.textContent = s.getAttribute("data-title");
+      count.textContent = String(cur + 1).padStart(2, "0") + " / " + String(slides.length).padStart(2, "0");
+    }
+
+    function go(i, st) {
+      cur = Math.max(0, Math.min(slides.length - 1, i));
+      var fr = frags(slides[cur]);
+      step = st === "end" ? fr.length : Math.max(0, Math.min(fr.length, st || 0));
+      render(false);
+    }
+
+    function next() {
+      var fr = frags(slides[cur]);
+      if (step < fr.length) { step++; render(false); }
+      else if (cur < slides.length - 1) { go(cur + 1, 0); }
+    }
+    function prev() {
+      if (step > 0) { step--; render(false); }
+      else if (cur > 0) { go(cur - 1, "end"); }
+    }
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight" || e.key === " " || e.key === "Enter" || e.key === "PageDown") { e.preventDefault(); next(); }
+      else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); prev(); }
+      else if (e.key === "Home") { go(0, 0); }
+      else if (e.key === "End") { go(slides.length - 1, "end"); }
+    });
+    document.getElementById("deck").addEventListener("click", function (e) {
+      if (e.target.closest("button")) return;
+      next();
+    });
+    document.getElementById("nextb").addEventListener("click", function (e) { e.stopPropagation(); next(); });
+    document.getElementById("prevb").addEventListener("click", function (e) { e.stopPropagation(); prev(); });
+
+    render(false);
+  })();
+</script>
