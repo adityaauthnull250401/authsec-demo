@@ -1,0 +1,146 @@
+# C — fingerprint semantics. The highest-stakes group in the suite.
+#
+# The fingerprint is the dedupe key for the whole inventory. Get it too coarse
+# and two agents merge into one governed identity — you cannot tell them apart
+# and you certify the wrong thing. Get it too fine and one agent becomes a new
+# row on every restart, and the inventory is noise.
+#
+# run.py asserts fingerprint relationships across these cases, not just presence.
+---
+# C1 — two agent containers in ONE pod must be TWO agents.
+# This is the property the container-name component of the fingerprint exists
+# for. If this yields one sighting, the inventory can never distinguish a pod
+# running two agents from a pod running one.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c1-multi-container
+  namespace: conformance
+  annotations:
+    conformance/id: C1
+    conformance/desc: two agent containers in one pod are two distinct agents
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/assert-distinct-fingerprints: "planner,executor"
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: c1 } }
+  template:
+    metadata: { labels: { c: c1 } }
+    spec:
+      containers:
+        - name: planner
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+        - name: executor
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# C2 — three replicas of one workload must be ONE agent, not three.
+# The fingerprint must exclude pod name and pod-template-hash.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c2-replicas
+  namespace: conformance
+  annotations:
+    conformance/id: C2
+    conformance/desc: N replicas collapse to one agent
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/assert-fingerprint-count: "1"
+spec:
+  replicas: 3
+  selector: { matchLabels: { c: c2 } }
+  template:
+    metadata: { labels: { c: c2 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# C3 / C4 — same container name and workload name, DIFFERENT namespace.
+# Must be two agents: namespace is part of the fingerprint, and the same chart
+# deployed to two namespaces is two governed things with two service accounts.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: conformance-alt
+  annotations:
+    conformance/scope: in-scope
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c3-same-name
+  namespace: conformance
+  annotations:
+    conformance/id: C3
+    conformance/desc: same workload name in namespace A
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/assert-differs-from: C4
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: c3 } }
+  template:
+    metadata: { labels: { c: c3 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c3-same-name
+  namespace: conformance-alt
+  annotations:
+    conformance/id: C4
+    conformance/desc: identical workload name in namespace B is a different agent
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/assert-differs-from: C3
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: c3 } }
+  template:
+    metadata: { labels: { c: c3 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# C5 — different image REPOSITORY must be a different agent.
+# Swapping what the container actually runs is a governance event worth
+# re-reviewing, even if the workload name never changed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c5-other-repo
+  namespace: conformance
+  annotations:
+    conformance/id: C5
+    conformance/desc: different image repository yields a different fingerprint
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/assert-differs-from: C2
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: c5 } }
+  template:
+    metadata: { labels: { c: c5 } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]

@@ -1,0 +1,131 @@
+{
+  "passed": [
+    [
+      "c-e1-plain/app",
+      "correctly not detected"
+    ],
+    [
+      "c-e2-optout/app",
+      "correctly not detected"
+    ],
+    [
+      "c-e6-value-not-key/app",
+      "correctly not detected"
+    ],
+    [
+      "invariant: no secret values in any sighting",
+      "sentinel absent from every payload"
+    ],
+    [
+      "invariant: identity_anchor on every sighting",
+      "present on all 1"
+    ],
+    [
+      "invariant: admission sightings carry the authenticated actor",
+      "2 sightings, actors: ['system:serviceaccount:kube-system:cronjob-controller', 'system:serviceaccount:kube-system:job-controller']"
+    ],
+    [
+      "invariant: schema_version on every sighting",
+      "present on all"
+    ]
+  ],
+  "failed": [
+    [
+      "c-a1-label/app",
+      "expected DETECTED, got nothing \u2014 explicit authsec.io/agent label is the strongest signal"
+    ],
+    [
+      "c-a3-fw-env/app",
+      "expected DETECTED, got nothing \u2014 ANTHROPIC_API_KEY is a framework-specific marker, not a generic credential"
+    ],
+    [
+      "c-a4-command/app",
+      "expected DETECTED, got nothing \u2014 framework token in args"
+    ],
+    [
+      "c-a5-mcp-mount/app",
+      "expected DETECTED, got nothing \u2014 mounted MCP configuration"
+    ],
+    [
+      "c-a6-generic-env/app",
+      "expected DETECTED, got nothing \u2014 OPENAI_API_KEY is a bare provider credential \u2014 real but weak alone"
+    ],
+    [
+      "c-a8-initcontainer/warmup",
+      "expected DETECTED, got nothing \u2014 initContainers must be inspected, not just containers"
+    ],
+    [
+      "c-b2-statefulset/app",
+      "expected DETECTED, got nothing \u2014 StatefulSet is a registered kind"
+    ],
+    [
+      "c-b3-daemonset/app",
+      "expected DETECTED, got nothing \u2014 DaemonSet is a registered kind"
+    ],
+    [
+      "c-b4-job/app",
+      "expected DETECTED, got nothing \u2014 Job is a registered kind"
+    ],
+    [
+      "c-b5-cronjob/app",
+      "expected DETECTED, got nothing \u2014 CronJob is a registered kind"
+    ],
+    [
+      "c-b6-bare-pod/app",
+      "expected DETECTED, got nothing \u2014 a bare Pod with no controller owner, created by a human account, is the manual-origin case governance surfaces first"
+    ],
+    [
+      "c-c5-two-agents/planner",
+      "expected DETECTED, got nothing \u2014 container 1 of 2 in one pod"
+    ],
+    [
+      "c-c5-two-agents/executor",
+      "expected DETECTED, got nothing \u2014 container 2 of 2 \u2014 must be a SEPARATE fingerprint"
+    ],
+    [
+      "c-c6-samename/app",
+      "expected DETECTED, got nothing \u2014 same name in two namespaces \u2014 see fingerprint invariants"
+    ],
+    [
+      "c-d1-argocd/app",
+      "expected DETECTED, got nothing \u2014 ArgoCD tracking label means a declarative controller owns this"
+    ],
+    [
+      "c-d2-helm/app",
+      "expected DETECTED, got nothing \u2014 app.kubernetes.io/managed-by=helm means automation"
+    ]
+  ],
+  "gaps": [
+    [
+      "c-a7-envfrom/app",
+      "not detected \u2014 envFrom.secretRef keys are resolved by the kubelet, so they are absent from the pod spec the webhook sees. Bulk-injected credentials are invisible."
+    ],
+    [
+      "c-f1-shadow-file-creds/api",
+      "not detected \u2014 generic image, generic entrypoint, credential from a mounted file. Zero signals. Closing this needs egress analysis, not more vocabulary."
+    ],
+    [
+      "c-f2-obfuscated-cmd/app",
+      "not detected \u2014 base64-encoded entrypoint \u2014 static analysis cannot see through it. Acceptable: this is evasion, not an accident."
+    ]
+  ],
+  "skipped": [
+    [
+      "invariant: fingerprint unique per container",
+      "c-c5 containers not both sighted"
+    ],
+    [
+      "invariant: fingerprint unique per namespace",
+      "c-c6 not sighted"
+    ],
+    [
+      "invariant: secret_refs recorded (name + key, no value)",
+      "c-a6 not sighted"
+    ],
+    [
+      "invariant: resync never claims manual origin",
+      "resync disabled or no resync sightings in this run"
+    ]
+  ],
+  "agents_sighted": 1
+}

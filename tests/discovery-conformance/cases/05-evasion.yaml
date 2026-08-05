@@ -1,0 +1,153 @@
+# E — evasion. Every workload here IS a real AI agent that the collector
+# CANNOT currently see.
+#
+# These are tracked as `blind-spot`, not `not-detected`, and the scorecard
+# reports them separately. A blind spot that stays a blind spot is not a passing
+# test — it is a measured coverage gap. The value is that it is measured rather
+# than assumed, so the number can be watched over time and cannot quietly grow.
+#
+# All of these are defeated by the same root cause: detection reads the manifest,
+# not the behaviour. Closing them needs egress traffic analysis (the `egress`
+# discovery source kind exists in the control plane's CHECK constraint and is
+# unbuilt), not more vocabulary.
+---
+# E1 — the realistic shadow agent, and the most common shape in the wild.
+# Generic image name, generic entrypoint, framework installed at build time,
+# provider credential read from a MOUNTED FILE rather than an env var.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e1-file-mounted-cred
+  namespace: conformance
+  annotations:
+    conformance/id: E1
+    conformance/desc: langchain baked into a generic image, credential from a file
+    conformance/expect: blind-spot
+    conformance/gap: no image/command/env/volume signal — nothing in the spec says agent
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: e1 } }
+  template:
+    metadata: { labels: { c: e1 } }
+    spec:
+      containers:
+        - name: api
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep infinity"]
+          volumeMounts:
+            - { name: creds, mountPath: /var/run/secrets/llm, readOnly: true }
+      volumes:
+        - name: creds
+          secret: { secretName: conformance-creds }
+---
+# E2 — credential fetched at runtime from a secrets manager. There is no
+# credential in the spec at all, so there is nothing to detect.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e2-runtime-secret-fetch
+  namespace: conformance
+  annotations:
+    conformance/id: E2
+    conformance/desc: credential fetched from Vault/ASM at runtime, absent from the spec
+    conformance/expect: blind-spot
+    conformance/gap: spec carries no credential reference to key off
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: e2 } }
+  template:
+    metadata: { labels: { c: e2 } }
+    spec:
+      containers:
+        - name: worker
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep infinity"]
+          env:
+            - { name: VAULT_ADDR, value: "https://vault.internal:8200" }
+            - { name: VAULT_SECRET_PATH, value: "kv/data/llm/openai" }
+---
+# E3 — the env key is indirected through envFrom, so the KEY NAME the detector
+# looks for never appears in the container spec. Whether this is caught depends
+# on whether the extractor resolves envFrom, which it cannot do at admission
+# time without an API read.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: e3-indirect-env
+  namespace: conformance
+data:
+  OPENAI_API_KEY: placeholder
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e3-envfrom-indirection
+  namespace: conformance
+  annotations:
+    conformance/id: E3
+    conformance/desc: provider key supplied via envFrom, so the key name is not in the spec
+    conformance/expect: blind-spot
+    conformance/gap: envFrom is a reference; resolving it needs an API read the webhook does not do
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: e3 } }
+  template:
+    metadata: { labels: { c: e3 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          envFrom:
+            - configMapRef: { name: e3-indirect-env }
+---
+# E4 — a self-hosted model with no recognisable credential key and no framework
+# token. Increasingly common as teams move to internal inference endpoints.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e4-self-hosted-model
+  namespace: conformance
+  annotations:
+    conformance/id: E4
+    conformance/desc: agent against an internal inference endpoint, no known cred key
+    conformance/expect: blind-spot
+    conformance/gap: vocabulary is provider-centric; a private endpoint matches nothing
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: e4 } }
+  template:
+    metadata: { labels: { c: e4 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env:
+            - { name: MODEL_ENDPOINT, value: "http://inference.ml-platform.svc:8000/v1" }
+            - { name: MODEL_TOKEN, value: placeholder }
+---
+# E5 — an agent injected into an already-running pod via `kubectl debug`.
+# That is an UPDATE on pods/ephemeralcontainers, not a CREATE, so the default
+# webhook registration never fires. The parser handles ephemeral containers
+# already; this gap is purely registration. The suite creates the deployment
+# here and run.py performs the debug injection.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e5-ephemeral-target
+  namespace: conformance
+  annotations:
+    conformance/id: E5
+    conformance/desc: agent injected via kubectl debug into a running pod
+    conformance/expect: blind-spot
+    conformance/gap: UPDATE on pods/ephemeralcontainers is not in the default webhook rules
+    conformance/inject-ephemeral: "true"
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: e5 } }
+  template:
+    metadata: { labels: { c: e5 } }
+    spec:
+      containers:
+        - { name: app, image: busybox:1.36, command: ["sleep", "infinity"] }

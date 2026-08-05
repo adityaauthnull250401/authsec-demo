@@ -1,0 +1,146 @@
+# D — origin classification. Governance treats `manual` as the higher-risk case
+# (a human ran it with their own credentials, no pipeline record behind it), so
+# a wrong answer here mis-prioritises the whole Unregistered Agents queue.
+#
+# F — false-positive guards. These must NOT be reported. An inventory that
+# flags everything is an inventory nobody triages.
+---
+# D1 — GitOps management markers mean automation, even on a bare Pod.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: d1-gitops-pod
+  namespace: conformance
+  labels:
+    c: d1
+    app.kubernetes.io/managed-by: helm
+  annotations:
+    conformance/id: D1
+    conformance/desc: GitOps/IaC label forces automated even on a bare Pod
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/origin: automated
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sleep", "infinity"]
+      env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# D2 — a controller-owned pod is automated by construction.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: d2-controller-owned
+  namespace: conformance
+  annotations:
+    conformance/id: D2
+    conformance/desc: declared as a managed workload
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/origin: automated
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: d2 } }
+  template:
+    metadata: { labels: { c: d2 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# ---------------------------------------------------------------------------
+# F — must NOT be detected
+# ---------------------------------------------------------------------------
+#
+# F1 — an ordinary web server. No LLM signal of any kind.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: f1-plain-nginx
+  namespace: conformance
+  annotations:
+    conformance/id: F1
+    conformance/desc: ordinary workload with no agent signal
+    conformance/expect: not-detected
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: f1 } }
+  template:
+    metadata: { labels: { c: f1 } }
+    spec:
+      containers:
+        - { name: web, image: busybox:1.36, command: ["sleep", "infinity"] }
+---
+# F2 — an AuthSec service-account caller. A non-human identity, but not an AI
+# agent. Detecting it would conflate NHI discovery with agent discovery.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: f2-m2m-caller
+  namespace: conformance
+  annotations:
+    conformance/id: F2
+    conformance/desc: NHI caller with no LLM signal is not an AI agent
+    conformance/expect: not-detected
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: f2 } }
+  template:
+    metadata: { labels: { c: f2 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env:
+            - { name: AUTHSEC_INTROSPECTION_CLIENT_ID, value: svc-demo }
+            - { name: AUTHSEC_ISSUER, value: https://app.authsec.ai }
+---
+# F3 — explicit opt-out. The label is present but set to "false", which the
+# detector must honour as "not an agent" rather than "label present".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: f3-explicit-optout
+  namespace: conformance
+  annotations:
+    conformance/id: F3
+    conformance/desc: authsec.io/agent=false is an opt-out, not a signal
+    conformance/expect: not-detected
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: f3 } }
+  template:
+    metadata:
+      labels: { c: f3, authsec.io/agent: "false" }
+    spec:
+      containers:
+        - { name: app, image: busybox:1.36, command: ["sleep", "infinity"] }
+---
+# F4 — a credential-shaped env var that is not a model provider. Guards against
+# the generic-credential net being widened into "anything with API_KEY".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: f4-unrelated-api-key
+  namespace: conformance
+  annotations:
+    conformance/id: F4
+    conformance/desc: non-LLM API key must not trip the generic credential net
+    conformance/expect: not-detected
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: f4 } }
+  template:
+    metadata: { labels: { c: f4 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env:
+            - { name: STRIPE_API_KEY, value: placeholder }
+            - { name: DATADOG_API_KEY, value: placeholder }

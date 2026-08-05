@@ -1,0 +1,191 @@
+# A — signal coverage. One workload per detection signal, in isolation, so a
+# failure names exactly which heuristic broke.
+#
+# Every case declares its own expectation in annotations; run.py reads those
+# from the live cluster and compares them against what the collector reported.
+# There is no separate expectations file to drift out of sync.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a1-label
+  namespace: conformance
+  annotations:
+    conformance/id: A1
+    conformance/desc: explicit authsec.io/agent label
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/signal: label
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: a1 } }
+  template:
+    metadata:
+      labels: { c: a1, authsec.io/agent: "true" }
+    spec:
+      containers:
+        - { name: app, image: busybox:1.36, command: ["sleep", "infinity"] }
+---
+# The image reference is the signal, so the ref itself must contain a framework
+# token. Retagging busybox is enough — nothing pulls a real framework image.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a2-image-token
+  namespace: conformance
+  annotations:
+    conformance/id: A2
+    conformance/desc: image reference contains a framework token
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/signal: image
+    conformance/framework: langchain
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: a2 } }
+  template:
+    metadata: { labels: { c: a2 } }
+    spec:
+      containers:
+        - name: app
+          image: localhost/langchain-runtime:conformance
+          imagePullPolicy: Never
+          command: ["sleep", "infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a3-framework-env
+  namespace: conformance
+  annotations:
+    conformance/id: A3
+    conformance/desc: framework-specific env key (ANTHROPIC_API_KEY)
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/signal: env_marker
+    conformance/framework: anthropic-sdk
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: a3 } }
+  template:
+    metadata: { labels: { c: a3 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env:
+            - { name: ANTHROPIC_API_KEY, value: placeholder }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a4-command-token
+  namespace: conformance
+  annotations:
+    conformance/id: A4
+    conformance/desc: command/args reference a framework
+    conformance/expect: detected
+    conformance/confidence: medium
+    conformance/signal: command
+    conformance/framework: crewai
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: a4 } }
+  template:
+    metadata: { labels: { c: a4 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args: ["python -m crewai.crew --serve; sleep infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a5-mcp-mount
+  namespace: conformance
+  annotations:
+    conformance/id: A5
+    conformance/desc: mounts an MCP configuration path
+    conformance/expect: detected
+    conformance/confidence: medium
+    conformance/signal: volume
+    conformance/framework: mcp
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: a5 } }
+  template:
+    metadata: { labels: { c: a5 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          volumeMounts:
+            - { name: cfg, mountPath: /etc/mcp }
+      volumes:
+        - { name: cfg, emptyDir: {} }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a6-generic-cred
+  namespace: conformance
+  annotations:
+    conformance/id: A6
+    conformance/desc: bare provider credential key only (weakest real signal)
+    conformance/expect: detected
+    conformance/confidence: low
+    conformance/signal: env_marker
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: a6 } }
+  template:
+    metadata: { labels: { c: a6 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env:
+            - { name: OPENAI_API_KEY, value: placeholder }
+---
+# Secret values must never leave the cluster. This asserts the sighting carries
+# the Secret name/key/env-var as a reference and no value anywhere.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a7-secret-ref
+  namespace: conformance
+  annotations:
+    conformance/id: A7
+    conformance/desc: secretKeyRef recorded as a reference, never a value
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/signal: env_marker
+    conformance/assert-secret-ref: "conformance-creds/anthropic"
+    conformance/assert-no-value: "super-secret-do-not-leak"
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: a7 } }
+  template:
+    metadata: { labels: { c: a7 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: { name: conformance-creds, key: anthropic }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: conformance-creds
+  namespace: conformance
+stringData:
+  anthropic: super-secret-do-not-leak

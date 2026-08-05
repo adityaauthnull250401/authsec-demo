@@ -1,0 +1,430 @@
+# Discovery collector conformance cases — declarative half of the suite.
+#
+# Every workload here is named `c-<id>-...` so assert.py can map a sighting back
+# to the case that produced it. Expected outcomes live in expectations.json;
+# this file only describes the input.
+#
+# Cases whose verdict depends on cluster manipulation (scaling, image bumps,
+# killing the collector, namespace exclusion, resync) are driven by run.sh
+# instead — they cannot be expressed as a static manifest.
+#
+# Images are alpine because detection is static pod-spec analysis: the collector
+# reads the spec and never executes the container. Where the *image reference*
+# itself is the thing under test, alpine is retagged by run.sh to carry the
+# token being tested.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dc-conformance
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: c-creds
+  namespace: dc-conformance
+type: Opaque
+stringData:
+  # G1 greps every sighting for this literal. If it ever appears, the collector
+  # is leaking secret values and the suite fails hard.
+  openai: SENTINEL-SECRET-VALUE-MUST-NEVER-BE-REPORTED
+  anthropic: SENTINEL-SECRET-VALUE-MUST-NEVER-BE-REPORTED
+
+# ===========================================================================
+# A. Signal coverage
+# ===========================================================================
+---
+# A1 label -> high
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-a1-label, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-a1-label } }
+  template:
+    metadata:
+      labels: { app: c-a1-label, authsec.io/agent: "true" }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+---
+# A3 framework env marker -> high
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-a3-fw-env, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-a3-fw-env } }
+  template:
+    metadata: { labels: { app: c-a3-fw-env } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom: { secretKeyRef: { name: c-creds, key: anthropic } }
+---
+# A4 command token -> medium
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-a4-command, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-a4-command } }
+  template:
+    metadata: { labels: { app: c-a4-command } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sh", "-c"]
+          args: ["python -m crewai.cli serve; sleep infinity"]
+---
+# A5 MCP volume mount -> medium
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-a5-mcp-mount, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-a5-mcp-mount } }
+  template:
+    metadata: { labels: { app: c-a5-mcp-mount } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          volumeMounts: [{ name: mcp, mountPath: /etc/mcp }]
+      volumes: [{ name: mcp, emptyDir: {} }]
+---
+# A6 generic provider credential -> low
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-a6-generic-env, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-a6-generic-env } }
+  template:
+    metadata: { labels: { app: c-a6-generic-env } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom: { secretKeyRef: { name: c-creds, key: openai } }
+---
+# A7 envFrom secretRef — keys are NOT in the pod spec, so the collector cannot
+#     see them. Expected: NOT detected. This is a genuine coverage gap and the
+#     suite records it rather than pretending otherwise.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-a7-envfrom, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-a7-envfrom } }
+  template:
+    metadata: { labels: { app: c-a7-envfrom } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          envFrom: [{ secretRef: { name: c-creds } }]
+---
+# A8 initContainer must be inspected too
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-a8-initcontainer, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-a8-initcontainer } }
+  template:
+    metadata: { labels: { app: c-a8-initcontainer } }
+    spec:
+      initContainers:
+        - name: warmup
+          image: alpine:3.20
+          command: ["sh", "-c", "echo langchain-preload"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+
+# ===========================================================================
+# B. Workload kinds — every kind the webhook registers for
+# ===========================================================================
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: c-b2-statefulset, namespace: dc-conformance }
+spec:
+  serviceName: c-b2-statefulset
+  replicas: 1
+  selector: { matchLabels: { app: c-b2-statefulset } }
+  template:
+    metadata: { labels: { app: c-b2-statefulset, authsec.io/agent: "true" } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: { name: c-b3-daemonset, namespace: dc-conformance }
+spec:
+  selector: { matchLabels: { app: c-b3-daemonset } }
+  template:
+    metadata: { labels: { app: c-b3-daemonset, authsec.io/agent: "true" } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: c-b4-job, namespace: dc-conformance }
+spec:
+  template:
+    metadata: { labels: { app: c-b4-job, authsec.io/agent: "true" } }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["true"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: c-b5-cronjob, namespace: dc-conformance }
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata: { labels: { app: c-b5-cronjob, authsec.io/agent: "true" } }
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: app
+              image: alpine:3.20
+              command: ["true"]
+---
+# B6 bare Pod created directly — also the D3 origin case (no controller, human
+#    actor), so origin must be "manual".
+apiVersion: v1
+kind: Pod
+metadata:
+  name: c-b6-bare-pod
+  namespace: dc-conformance
+  labels: { app: c-b6-bare-pod, authsec.io/agent: "true" }
+spec:
+  containers:
+    - name: app
+      image: alpine:3.20
+      command: ["sleep", "infinity"]
+
+# ===========================================================================
+# C. Fingerprint invariants — static half. C1-C4 need mutation, see run.sh.
+# ===========================================================================
+---
+# C5 two agent containers in one pod -> TWO distinct fingerprints.
+#    The single most important correctness property in the whole system: if this
+#    collapses to one, the inventory can never distinguish two agents.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-c5-two-agents, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-c5-two-agents } }
+  template:
+    metadata: { labels: { app: c-c5-two-agents } }
+    spec:
+      containers:
+        - name: planner
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+        - name: executor
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          env: [{ name: OPENAI_API_KEY, value: placeholder }]
+---
+apiVersion: v1
+kind: Namespace
+metadata: { name: dc-conformance-alt }
+---
+# C6 identical workload+container name in a DIFFERENT namespace -> different
+#    fingerprint. Namespace is part of the key.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-c6-samename, namespace: dc-conformance-alt }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-c6-samename } }
+  template:
+    metadata: { labels: { app: c-c6-samename, authsec.io/agent: "true" } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-c6-samename, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-c6-samename } }
+  template:
+    metadata: { labels: { app: c-c6-samename, authsec.io/agent: "true" } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+
+# ===========================================================================
+# D. Origin classification
+# ===========================================================================
+---
+# D1 ArgoCD tracking label -> automated
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-d1-argocd, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-d1-argocd } }
+  template:
+    metadata:
+      labels:
+        app: c-d1-argocd
+        authsec.io/agent: "true"
+        argocd.argoproj.io/instance: demo
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+---
+# D2 managed-by=helm -> automated
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-d2-helm, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-d2-helm } }
+  template:
+    metadata:
+      labels:
+        app: c-d2-helm
+        authsec.io/agent: "true"
+        app.kubernetes.io/managed-by: helm
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+
+# ===========================================================================
+# E. Negative cases — the collector must NOT fire
+# ===========================================================================
+---
+# E1 an ordinary workload with no agent signal at all
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-e1-plain, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-e1-plain } }
+  template:
+    metadata: { labels: { app: c-e1-plain } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          env: [{ name: DATABASE_URL, value: postgres://localhost/db }]
+---
+# E2 explicit opt-out: authsec.io/agent="false" must suppress detection even
+#    though the label key is present.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-e2-optout, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-e2-optout } }
+  template:
+    metadata: { labels: { app: c-e2-optout, authsec.io/agent: "false" } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+---
+# E6 an env var whose VALUE mentions a framework but whose KEY is unknown.
+#    Detection must be key-driven; firing here would mean values are being
+#    scanned, which is both wrong and a privacy problem.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-e6-value-not-key, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-e6-value-not-key } }
+  template:
+    metadata: { labels: { app: c-e6-value-not-key } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sleep", "infinity"]
+          env:
+            - name: APP_DESCRIPTION
+              value: "a service that talks to langchain and anthropic and openai"
+
+# ===========================================================================
+# F. Known blind spots. Expected NOT detected. These are documented gaps, not
+#    bugs — the suite asserts them so a future change that closes one is
+#    noticed, and so nobody assumes coverage that does not exist.
+# ===========================================================================
+---
+# F1 generic image, generic entrypoint, credential from a MOUNTED FILE
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-f1-shadow-file-creds, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-f1-shadow-file-creds } }
+  template:
+    metadata: { labels: { app: c-f1-shadow-file-creds } }
+    spec:
+      containers:
+        - name: api
+          image: alpine:3.20
+          command: ["sh", "-c", "sleep infinity"]
+          volumeMounts: [{ name: creds, mountPath: /var/run/secrets/llm }]
+      volumes: [{ name: creds, secret: { secretName: c-creds } }]
+---
+# F2 obfuscated entrypoint — the framework name never appears in cleartext
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: c-f2-obfuscated-cmd, namespace: dc-conformance }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: c-f2-obfuscated-cmd } }
+  template:
+    metadata: { labels: { app: c-f2-obfuscated-cmd } }
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sh", "-c"]
+          args: ["echo cHl0aG9uIC1tIGxhbmdjaGFpbg== | base64 -d | sh; sleep infinity"]

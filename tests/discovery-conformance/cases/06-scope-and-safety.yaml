@@ -1,0 +1,111 @@
+# G — scope enforcement and safety.
+#
+# Scope is the difference between a discovery tool and a surveillance tool, and
+# safety is the difference between a discovery tool and an outage. Both are
+# asserted rather than trusted.
+---
+# G1 — runtime opt-out. A namespace labelled authsec.io/discovery=disabled must
+# not be scanned, and must take effect without redeploying the collector. The
+# webhook's namespaceSelector is the real filter, so the API server should never
+# call the collector for this namespace at all.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: conformance-optout
+  labels:
+    authsec.io/discovery: disabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g1-optout-agent
+  namespace: conformance-optout
+  annotations:
+    conformance/id: G1
+    conformance/desc: obvious agent in an opted-out namespace must not be reported
+    conformance/expect: not-detected
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: g1 } }
+  template:
+    metadata:
+      labels: { c: g1, authsec.io/agent: "true" }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# G2 — kube-system is excluded by chart default. An agent here must not be
+# reported, and more importantly the collector must never be in the admission
+# path for control-plane components. run.py verifies the exclusion is present in
+# the live webhook configuration rather than deploying into kube-system.
+#
+# G3 — the collector's own namespace is always excluded, even if explicitly
+# allowlisted. A webhook pointed at its own pods is a bootstrap hazard.
+# Also asserted by run.py against the live webhook configuration.
+---
+# G4 — a wide pod: many containers, only some agent-shaped. Asserts the
+# collector reports exactly the agent containers and does not choke on the rest,
+# and that a large AdmissionReview body is handled within the timeout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g4-wide-pod
+  namespace: conformance
+  annotations:
+    conformance/id: G4
+    conformance/desc: 8-container pod, 2 agent-shaped — exactly 2 reported
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/assert-distinct-fingerprints: "agent-a,agent-b"
+    conformance/assert-fingerprint-count: "2"
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: g4 } }
+  template:
+    metadata: { labels: { c: g4 } }
+    spec:
+      containers:
+        - name: agent-a
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+        - name: agent-b
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: CLAUDE_CODE, value: "1" }]
+        - { name: sidecar-1, image: busybox:1.36, command: ["sleep", "infinity"] }
+        - { name: sidecar-2, image: busybox:1.36, command: ["sleep", "infinity"] }
+        - { name: sidecar-3, image: busybox:1.36, command: ["sleep", "infinity"] }
+        - { name: sidecar-4, image: busybox:1.36, command: ["sleep", "infinity"] }
+        - { name: sidecar-5, image: busybox:1.36, command: ["sleep", "infinity"] }
+        - { name: sidecar-6, image: busybox:1.36, command: ["sleep", "infinity"] }
+---
+# G5 — hostNetwork + privileged agent. Must still be detected, and the sighting
+# must record hostNetwork so governance can rank blast radius. An agent on the
+# host network reaches everything the node reaches.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: g5-host-network
+  namespace: conformance
+  annotations:
+    conformance/id: G5
+    conformance/desc: hostNetwork agent detected and flagged
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/assert-host-network: "true"
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: g5 } }
+  template:
+    metadata: { labels: { c: g5 } }
+    spec:
+      hostNetwork: true
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]

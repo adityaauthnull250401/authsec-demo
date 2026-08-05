@@ -1,0 +1,149 @@
+# B — workload-kind coverage. The collector must parse every kind it registers
+# for, and read all three container lists. A miss here is a whole class of
+# agents that are silently invisible.
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: b1-statefulset
+  namespace: conformance
+  annotations:
+    conformance/id: B1
+    conformance/desc: StatefulSet
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/workload-kind: StatefulSet
+spec:
+  serviceName: b1
+  replicas: 1
+  selector: { matchLabels: { c: b1 } }
+  template:
+    metadata: { labels: { c: b1 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: b2-daemonset
+  namespace: conformance
+  annotations:
+    conformance/id: B2
+    conformance/desc: DaemonSet
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/workload-kind: DaemonSet
+spec:
+  selector: { matchLabels: { c: b2 } }
+  template:
+    metadata: { labels: { c: b2 } }
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: b3-job
+  namespace: conformance
+  annotations:
+    conformance/id: B3
+    conformance/desc: Job
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/workload-kind: Job
+spec:
+  template:
+    metadata: { labels: { c: b3 } }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# A CronJob agent is the classic repeat-sighting source: it recreates a Job and
+# a Pod on every schedule, all with the same fingerprint. Schedule is frequent
+# on purpose so the suite can also observe suppression behaviour.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: b4-cronjob
+  namespace: conformance
+  annotations:
+    conformance/id: B4
+    conformance/desc: CronJob
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/workload-kind: CronJob
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata: { labels: { c: b4 } }
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: app
+              image: busybox:1.36
+              command: ["sh", "-c", "sleep 10"]
+              env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# A bare Pod applied by a human is how a pre-existing installed base surfaces
+# as pods restart, and it is the only shape that can legitimately be classified
+# `manual` — nothing recreates it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: b5-bare-pod
+  namespace: conformance
+  labels: { c: b5 }
+  annotations:
+    conformance/id: B5
+    conformance/desc: bare Pod created directly
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/workload-kind: Pod
+    conformance/origin: manual
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sleep", "infinity"]
+      env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+---
+# An agent smuggled into an initContainer. Short-lived but it runs with the
+# pod's identity and can reach everything the pod can.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: b6-init-container
+  namespace: conformance
+  annotations:
+    conformance/id: B6
+    conformance/desc: agent in an initContainer
+    conformance/expect: detected
+    conformance/confidence: high
+    conformance/container-kind: initContainer
+spec:
+  replicas: 1
+  selector: { matchLabels: { c: b6 } }
+  template:
+    metadata: { labels: { c: b6 } }
+    spec:
+      initContainers:
+        - name: init-agent
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 2"]
+          env: [{ name: ANTHROPIC_API_KEY, value: placeholder }]
+      containers:
+        - { name: app, image: busybox:1.36, command: ["sleep", "infinity"] }

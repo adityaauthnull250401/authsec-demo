@@ -1,0 +1,239 @@
+# AuthSec demo — Kubernetes deployment.
+#
+# Deploys the demo's MCP server and its two agent runtimes so the AuthSec
+# discovery collector can detect them. Read k8s/README.md first: it explains
+# which fields below exist for detection and must not be dropped.
+#
+# Before applying:
+#   1. build and push an image (see README "Build an image")
+#   2. replace every REPLACE_ME/<...> placeholder
+#   3. create the secrets — do NOT commit real values into this file
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: authsec-demo
+---
+# Model-provider credential. The collector records that OPENAI_API_KEY exists
+# and which Secret/key it comes from; it never reads the value.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-llm-creds
+  namespace: authsec-demo
+type: Opaque
+stringData:
+  openai: REPLACE_ME
+---
+# GitHub App private key used by the MCP server's provider hop.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-github-app
+  namespace: authsec-demo
+type: Opaque
+stringData:
+  private-key.pem: REPLACE_ME
+---
+# Non-secret demo configuration. Mirrors .env.example; see setup.md for meanings.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-config
+  namespace: authsec-demo
+data:
+  AUTHSEC_AUTHORIZATION_SERVER: https://app.authsec.ai
+  AUTHSEC_ISSUER: https://app.authsec.ai
+  AUTHSEC_RESOURCE_URI: https://mcp-demo.mcpauthz.com/mcp
+  AUTHSEC_POLICY_MODE: enforce
+  AUTHSEC_VALIDATION_MODE: introspect
+  DEMO_HOST: 0.0.0.0
+  DEMO_PORT: "8091"
+  DEMO_LLM_MODEL: gpt-4o-mini
+  DEMO_LOG_LEVEL: info
+  DEMO_LOG_RAW_TOKENS: "false"
+  DEMO_ENABLE_SPIRE: "false"
+---
+# ---------------------------------------------------------------------------
+# MCP server — the protected resource (apps/mcp_server).
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-mcp-server
+  namespace: authsec-demo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-mcp-server
+  namespace: authsec-demo
+spec:
+  selector:
+    app: demo-mcp-server
+  ports:
+    - name: http
+      port: 8091
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-mcp-server
+  namespace: authsec-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-mcp-server
+  template:
+    metadata:
+      labels:
+        app: demo-mcp-server
+        # Explicit declaration. Highest-confidence signal and the only one that
+        # does not depend on guessing from the image or the environment.
+        authsec.io/agent: "true"
+    spec:
+      # Becomes provisioning_hints.identity_anchor
+      # (system:serviceaccount:authsec-demo:demo-mcp-server). Give each
+      # component its own SA so discovered agents are distinguishable.
+      serviceAccountName: demo-mcp-server
+      containers:
+        - name: mcp-server
+          image: REPLACE_ME/authsec-demo:latest
+          command: ["authsec-demo-server"]
+          ports:
+            - name: http
+              containerPort: 8091
+          envFrom:
+            - configMapRef:
+                name: demo-config
+          env:
+            - name: GITHUB_APP_ID
+              value: "<your-github-app-id>"
+            - name: GITHUB_INSTALLATION_ID
+              value: "<your-installation-id>"
+            - name: GITHUB_PRIVATE_KEY
+              value: /etc/github/private-key.pem
+            - name: AUTHSEC_RESOURCE_SERVER_ID
+              value: "<resource-server-id>"
+          volumeMounts:
+            - name: github-app
+              mountPath: /etc/github
+              readOnly: true
+            # Mounting the MCP config here is itself a detection signal
+            # (framework "mcp"), and it is where FastMCP expects it.
+            - name: mcp-config
+              mountPath: /etc/mcp
+      volumes:
+        - name: github-app
+          secret:
+            secretName: demo-github-app
+        - name: mcp-config
+          emptyDir: {}
+---
+# ---------------------------------------------------------------------------
+# LangChain ReAct runtime (apps/agents/runtime.py).
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-agent-runtime
+  namespace: authsec-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-agent-runtime
+  namespace: authsec-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-agent-runtime
+  template:
+    metadata:
+      labels:
+        app: demo-agent-runtime
+        authsec.io/agent: "true"
+    spec:
+      serviceAccountName: demo-agent-runtime
+      containers:
+        - name: agent-runtime
+          image: REPLACE_ME/authsec-demo:latest
+          # Naming langchain in the command is a second, independent signal, so
+          # detection does not rest on the label alone.
+          command: ["python", "-m", "apps.agents.cli"]
+          args: ["--runtime", "langchain-react", "--serve"]
+          envFrom:
+            - configMapRef:
+                name: demo-config
+          env:
+            # Recorded as a detection signal (key only) and as a secret_ref, so
+            # the provisioning agent knows which credential to broker.
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: demo-llm-creds
+                  key: openai
+            - name: AUTHSEC_AGENT_CLIENT_ID
+              value: "<agent-client-id>"
+            - name: AUTHSEC_AGENT_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: demo-agent-oauth
+                  key: client-secret
+---
+# ---------------------------------------------------------------------------
+# XAA runtime — acts on behalf of a signed-in human (apps/agents/session.py).
+# Separate Deployment and SA from the runtime above: they are two governed
+# agents with different authority models, so they must not share an identity.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-xaa-agent
+  namespace: authsec-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-xaa-agent
+  namespace: authsec-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-xaa-agent
+  template:
+    metadata:
+      labels:
+        app: demo-xaa-agent
+        authsec.io/agent: "true"
+    spec:
+      serviceAccountName: demo-xaa-agent
+      containers:
+        - name: xaa-agent
+          image: REPLACE_ME/authsec-demo:latest
+          command: ["python", "-m", "apps.agents.cli"]
+          args: ["--runtime", "langchain-react", "--mode", "xaa", "--serve"]
+          envFrom:
+            - configMapRef:
+                name: demo-config
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: demo-llm-creds
+                  key: openai
+            - name: AUTHSEC_AGENT_LOGIN_PORT
+              value: "8092"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-agent-oauth
+  namespace: authsec-demo
+type: Opaque
+stringData:
+  client-secret: REPLACE_ME
