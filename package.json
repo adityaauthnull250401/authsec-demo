@@ -7,6 +7,7 @@
     "m2m:setup": "uv run setup-m2m",
     "server": "uv run authsec-demo-server",
     "bootstrap": "uv run bootstrap",
+    "recover": "uv run recover",
     "smoke": "uv run smoke",
     "reset": "uv run reset",
     "spire:up": "bash scripts/spire-up.sh",

@@ -307,6 +307,40 @@ read repositories.
 The following sections are recovery/reference. They are not required for normal startup on
 this machine.
 
+### Preferred recovery after an AuthSec database reset
+
+Use the one-token reconciler before following the manual sections below:
+
+```bash
+cd /Users/pc/Desktop/authsec-demo
+pnpm recover
+```
+
+Paste a short-lived AuthSec workspace **owner/admin OAuth bearer** into the hidden prompt.
+The command never stores that bearer. It reconstructs the Application, introspection
+credential, scopes, roles, tool mappings, M2M Service Account, external SPIRE provider,
+SPIFFE workload, confidential Agent, presenter Triage assignment, and activation state. It
+temporarily starts `pnpm share`, runs deterministic M2M/SPIFFE proofs, and stops everything
+before returning.
+
+For a read-only comparison first:
+
+```bash
+pnpm recover --audit
+```
+
+The GitHub App/PEM, Cloudflare tunnels, M2M private key, and local SPIRE Server state are
+preserved as durable user-owned trust anchors. A recovery run never deletes or replaces
+them. After recovery, repeat only the user-owned OAuth ceremonies that an administrator
+must not impersonate:
+
+```bash
+uv run demo-agent login
+```
+
+Claude Code and Codex will likewise request their independent OAuth logins on first use.
+See `recovery.md` for the design, failure model, and non-interactive stdin option.
+
 ### 1. Install local dependencies
 
 Requirements:

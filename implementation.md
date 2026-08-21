@@ -191,6 +191,7 @@ authsec-demo/
 │   ├── setup_m2m.py              local RSA/JWKS and M2M state
 │   ├── keys.py                   private-key generation
 │   ├── bootstrap.py              optional admin API reconciliation
+│   ├── recover.py                one-token AuthSec database reconstruction
 │   ├── authsec_api.py            optional admin API client
 │   ├── mcp_rpc.py                raw MCP initialize/list/call helpers
 │   ├── smoke.py                  acceptance matrix
@@ -809,7 +810,37 @@ The expected stopped state is:
 | `pnpm agent:spiffe` | readiness-gated isolated workload ReAct run; bounded pre-token JWKS retry | token + read calls |
 | `uv run smoke ...` | multi-act acceptance matrix | depends on flags |
 | `uv run bootstrap` | optional admin reconciliation | requires admin token |
+| `uv run recover` | reconstruct and prove the AuthSec topology after DB reset | requires admin token; stops share afterward |
+| `uv run recover --audit` | compare local anchors with the AuthSec workspace | read-only; requires admin token |
 | `uv run reset <run_id>` | scoped revocation/issue cleanup | requires admin token |
+
+### One-token database recovery
+
+`scripts/recover.py` turns a short-lived workspace owner/admin OAuth bearer into a resumable
+reconstruction of all AuthSec-owned demo records. It uses only product APIs—never direct
+database access—and deliberately preserves external/local trust anchors:
+
+1. derives and validates the workspace and presenter subject from the bearer;
+2. discovers or creates the exact Resource URI Application and immediately checkpoints the
+   one-time introspection secret into mode-`0600` `.env`;
+3. creates/reconciles the three canonical scopes and exact Reader/Triage role grants;
+4. reuses the local M2M private key while recreating its public-key credential and Client ID;
+5. creates/reuses the external SPIRE provider and exact federated SPIFFE workload;
+6. validates the configured confidential Agent or creates one and immediately checkpoints
+   its one-time secret;
+7. assigns Triage to the bearer subject when it resolves to a user in that workspace;
+8. starts the managed share group temporarily, waits for the real SDK manifest, applies the
+   exact admin mappings, previews and performs activation;
+9. runs preflight plus deterministic M2M and SPIFFE proofs, then stops the full share group.
+
+The admin bearer is accepted via a hidden prompt, process environment, or stdin and is never
+persisted. `.state/recovery.json` contains only non-secret IDs and phase checkpoints. Recovery
+does not try to roll back across AuthSec, Cloudflare, GitHub, and local SPIRE: each one-time
+credential is saved before continuing, so an interrupted run can safely resume.
+
+The remaining post-reset steps are intentionally interactive: the presenter, Claude Code,
+and Codex must each complete their own OAuth login. An admin bearer cannot legitimately
+manufacture those independent human/client sessions. See `recovery.md` for the full contract.
 
 ## 18. Preflight and failure semantics
 

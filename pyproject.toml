@@ -39,6 +39,7 @@ setup-m2m = "scripts.setup_m2m:main"
 preflight = "scripts.preflight:main"
 validate-share = "scripts.validate_share:main"
 bootstrap = "scripts.bootstrap:main"
+recover = "scripts.recover:main"
 smoke = "scripts.smoke:main"
 reset = "scripts.cleanup:main"
 

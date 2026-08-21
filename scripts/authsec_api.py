@@ -13,15 +13,18 @@ log = get_logger("authsec.api")
 
 class AuthSecAPIError(RuntimeError):
     def __init__(self, method: str, path: str, response: httpx.Response) -> None:
+        payload: Any = None
         message = ""
         try:
             payload = response.json()
-            message = str(payload.get("error") or payload.get("message") or "")
+            if isinstance(payload, dict):
+                message = str(payload.get("error") or payload.get("message") or "")
         except Exception:
-            message = ""
+            payload = None
         suffix = f": {message}" if message else ""
         super().__init__(f"AuthSec {method} {path} failed with HTTP {response.status_code}{suffix}")
         self.status_code = response.status_code
+        self.payload = payload
 
 
 class AuthSecAdminClient:
