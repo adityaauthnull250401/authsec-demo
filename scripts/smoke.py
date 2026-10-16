@@ -68,7 +68,7 @@ async def _public_checks(results: list[Result]) -> None:
                 "RFC 9728 metadata",
                 metadata.status_code == 200
                 and payload.get("resource") == RESOURCE_URI
-                and "https://app.authsec.ai" in payload.get("authorization_servers", []),
+                and "https://prod.api.authsec.ai" in payload.get("authorization_servers", []),
                 f"HTTP {metadata.status_code}; resource={payload.get('resource')}",
             )
         )

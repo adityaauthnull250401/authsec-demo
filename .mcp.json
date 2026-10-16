@@ -1,0 +1,12 @@
+{
+      "mcpServers": {
+        "filesystem": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-filesystem", "/srv"]
+        },
+        "internal-api": {
+          "url": "https://api.internal.acme.test/mcp",
+          "env": { "ACME_API_TOKEN": "unused" }
+        }
+      }
+    }

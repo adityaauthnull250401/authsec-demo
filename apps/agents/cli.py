@@ -52,7 +52,7 @@ def _parser() -> argparse.ArgumentParser:
 
 async def _login(port: int | None) -> None:
     load_project_env()
-    issuer = optional("AUTHSEC_ISSUER", "https://app.authsec.ai")
+    issuer = optional("AUTHSEC_ISSUER", "https://prod.api.authsec.ai")
     client_id = required("AUTHSEC_AGENT_CLIENT_ID")
     login_port = port or int(optional("AUTHSEC_AGENT_LOGIN_PORT", "8126"))
     console.print(
@@ -186,7 +186,7 @@ def _render_spiffe_proof(claims: dict[str, Any]) -> None:
     table.add_row("JWT-SVID sub", required("SPIFFE_ID"), "SPIRE-attested workload identity")
     table.add_row(
         "JWT-SVID aud",
-        f"{optional('AUTHSEC_ISSUER', 'https://app.authsec.ai').rstrip('/')}/oauth/token",
+        f"{optional('AUTHSEC_ISSUER', 'https://prod.api.authsec.ai').rstrip('/')}/oauth/token",
         "SVID can be redeemed only at AuthSec's token endpoint",
     )
     table.add_row(

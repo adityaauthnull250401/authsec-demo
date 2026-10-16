@@ -55,7 +55,7 @@ async def _run(raw_run_id: str, skip_github: bool) -> int:
     if token_workspace and token_workspace != expected_workspace:
         raise RuntimeError("Admin token workspace does not match AUTHSEC_DEMO_WORKSPACE_ID")
     rs_id = required("AUTHSEC_RESOURCE_SERVER_ID")
-    issuer = optional("AUTHSEC_ISSUER", "https://app.authsec.ai")
+    issuer = optional("AUTHSEC_ISSUER", "https://prod.api.authsec.ai")
     run = load_run(run_id)
 
     async with AuthSecAdminClient(issuer, admin_token) as api:

@@ -11,6 +11,11 @@ AuthSec-owned topology and prove the two unattended machine flows. The bearer is
 through a hidden terminal prompt and is never written to `.env`, `.state`, logs, or shell
 history.
 
+Recovery keeps the AuthSec UI origin separate from its API origin. `AUTHSEC_ISSUER` is the
+OAuth issuer used for `/oauth/token`, while `AUTHSEC_ADMIN_API_URL` selects the product API
+used to reconcile workspace records. Both production API settings default to
+`https://prod.api.authsec.ai`; the browser console remains on `https://app.authsec.ai`.
+
 ```text
 short-lived admin bearer
           │
@@ -113,7 +118,8 @@ the demo is intended to prove.
 
 ## Database-change compatibility boundary
 
-The recovery client uses the product-level AuthSec APIs under `/authsec/applications`, plus
+The recovery client uses `AUTHSEC_ADMIN_API_URL` and the product-level AuthSec APIs under
+`/authsec/applications`, plus
 workspace-scoped service-account, workload-provider, workload, and Agent endpoints. It does
 not access the AuthSec database directly. If a migration changes physical tables while these
 API contracts remain stable, recovery is unaffected. If an API contract changes, the command

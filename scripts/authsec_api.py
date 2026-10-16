@@ -56,7 +56,14 @@ class AuthSecAdminClient:
             raise AuthSecAPIError(method, path, response)
         if response.status_code == 204 or not response.content:
             return None
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            content_type = response.headers.get("content-type", "unknown")
+            raise RuntimeError(
+                f"AuthSec {method.upper()} {path} returned HTTP {response.status_code} "
+                f"with non-JSON content ({content_type}); check AUTHSEC_ADMIN_API_URL"
+            ) from exc
 
     async def get(self, path: str) -> Any:
         return await self.request("GET", path)

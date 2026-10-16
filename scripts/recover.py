@@ -51,6 +51,8 @@ BOOTSTRAP_STATE_PATH = STATE_DIR / "bootstrap.json"
 RECOVERY_STATE_PATH = STATE_DIR / "recovery.json"
 RECOVERY_LOG_PATH = STATE_DIR / "recovery-share.log"
 M2M_PRIVATE_KEY_PATH = SECRETS_DIR / "svc-github-ci-private.pem"
+DEFAULT_AUTHSEC_ADMIN_API_URL = "https://prod.api.authsec.ai"
+DEFAULT_AUTHSEC_ISSUER_URL = "https://prod.api.authsec.ai"
 
 READER_SCOPES = [READ_SCOPE, README_SCOPE]
 TRIAGE_SCOPES = [READ_SCOPE, README_SCOPE, ISSUE_SCOPE]
@@ -346,6 +348,14 @@ async def _ensure_roles(
     scopes: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     roles = _items(await api.get(f"/authsec/applications/{application_id}/roles"), "roles", "items")
+    viewer = next((item for item in roles if _role_label(item) == "viewer"), None)
+    if viewer is None:
+        raise RuntimeError("AuthSec did not create the required built-in viewer role")
+    await api.put(
+        f"/authsec/applications/{application_id}/roles/{viewer['id']}/scope-grants",
+        {"scope_ids": [str(scopes[scope]["id"]) for scope in READER_SCOPES]},
+    )
+    console.print("[green]reconciled[/green] built-in Viewer role with read-only scopes")
     reader = await _ensure_role(
         api,
         application_id,
@@ -497,7 +507,7 @@ async def _ensure_spiffe(
     env_file: PrivateEnvFile,
     application_id: str,
     reader_role: dict[str, Any],
-    base_url: str,
+    issuer_url: str,
 ) -> dict[str, str]:
     env = env_file.values()
     issuer = env.get("SPIRE_OIDC_DISCOVERY_URL") or "https://spire-demo.mcpauthz.com"
@@ -510,6 +520,7 @@ async def _ensure_spiffe(
     ]
     if len(matching) > 1:
         raise RuntimeError("Multiple SPIFFE providers use the demo issuer")
+    expected_audience = issuer_url.rstrip("/") + "/oauth/token"
     if matching:
         provider = matching[0]
         if provider.get("status") != "active":
@@ -517,7 +528,22 @@ async def _ensure_spiffe(
         existing_domain = str(provider.get("trust_domain") or "")
         if existing_domain and existing_domain != trust_domain:
             raise RuntimeError("Existing SPIFFE provider has the wrong trust domain")
-        console.print("[green]reused[/green] SPIFFE workload identity provider")
+        if set(provider.get("allowed_audiences") or []) != {expected_audience}:
+            await api.delete(f"/authsec/workload-identity-providers/{provider['id']}")
+            provider = await api.post(
+                "/authsec/workload-identity-providers",
+                {
+                    "name": "AuthSec Demo Local SPIRE",
+                    "kind": "spiffe",
+                    "issuer": issuer,
+                    "trust_domain": trust_domain,
+                    "allowed_audiences": [expected_audience],
+                    "subject_claim": "sub",
+                },
+            )
+            console.print("[green]reconciled[/green] SPIFFE provider token audience")
+        else:
+            console.print("[green]reused[/green] SPIFFE workload identity provider")
     else:
         provider = await api.post(
             "/authsec/workload-identity-providers",
@@ -526,7 +552,7 @@ async def _ensure_spiffe(
                 "kind": "spiffe",
                 "issuer": issuer,
                 "trust_domain": trust_domain,
-                "allowed_audiences": [base_url.rstrip("/") + "/oauth/token"],
+                "allowed_audiences": [expected_audience],
                 "subject_claim": "sub",
             },
         )
@@ -908,7 +934,7 @@ async def _audit(
     api: AuthSecAdminClient,
     env_file: PrivateEnvFile,
     identity: AdminIdentity,
-    base_url: str,
+    admin_api_url: str,
 ) -> int:
     env = env_file.values()
     applications = _items(await api.get("/authsec/applications"), "items", "applications")
@@ -937,7 +963,7 @@ async def _audit(
     if local_anchor:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
-                f"{base_url.rstrip('/')}/authsec/resource-servers/{application_id}/sdk-policy",
+                f"{admin_api_url.rstrip('/')}/authsec/resource-servers/{application_id}/sdk-policy",
                 auth=(application_id, env["AUTHSEC_INTROSPECTION_CLIENT_SECRET"]),
             )
             secret_works = response.status_code == 200
@@ -1102,17 +1128,19 @@ async def _run(args: argparse.Namespace) -> int:
     token = _admin_token(args)
     identity = _decode_admin_identity(token)
     env_file = PrivateEnvFile(create=not args.audit)
-    base_url = env_file.values().get("AUTHSEC_ISSUER") or "https://app.authsec.ai"
+    env = env_file.values()
+    issuer_url = env.get("AUTHSEC_ISSUER") or DEFAULT_AUTHSEC_ISSUER_URL
+    admin_api_url = env.get("AUTHSEC_ADMIN_API_URL") or DEFAULT_AUTHSEC_ADMIN_API_URL
 
-    async with AuthSecAdminClient(base_url, token) as api:
+    async with AuthSecAdminClient(admin_api_url, token) as api:
         if args.audit:
-            return await _audit(api, env_file, identity, base_url)
+            return await _audit(api, env_file, identity, admin_api_url)
 
         anchor = await _ensure_application(api, env_file, identity)
         scopes = await _ensure_scopes(api, anchor.application_id)
         reader, triage = await _ensure_roles(api, anchor.application_id, scopes)
         m2m = await _ensure_m2m(api, env_file, anchor.application_id, identity.workspace_id, reader)
-        spiffe = await _ensure_spiffe(api, env_file, anchor.application_id, reader, base_url)
+        spiffe = await _ensure_spiffe(api, env_file, anchor.application_id, reader, issuer_url)
         agent_client_id = await _ensure_agent(api, env_file, anchor.application_id)
         presenter_assigned = await _ensure_presenter_assignment(
             api, anchor.application_id, identity.user_id, triage

@@ -13,7 +13,8 @@ The non-secret anchors are:
 
 | Object | Current value |
 |---|---|
-| AuthSec issuer | `https://app.authsec.ai` |
+| AuthSec issuer | `https://prod.api.authsec.ai` |
+| AuthSec admin API | `https://prod.api.authsec.ai` |
 | Workspace ID | `41c3ab74-3393-4a2f-abd2-4245fcd8f690` |
 | Application | `GitHub MCP Demo` |
 | Application ID | `43fc5060-2dca-482a-b69c-1890de19c3ff` |
@@ -556,7 +557,7 @@ Client ID in `.env` as `SPIFFE_CLIENT_ID`.
 
 | Group | Required variables | Notes |
 |---|---|---|
-| Authorization server | `AUTHSEC_ISSUER`, `AUTHSEC_AUTHORIZATION_SERVER`, `AUTHSEC_JWKS_URL`, `AUTHSEC_INTROSPECTION_URL` | Pinned to `https://app.authsec.ai` endpoints |
+| Authorization server | `AUTHSEC_ISSUER`, `AUTHSEC_AUTHORIZATION_SERVER`, `AUTHSEC_JWKS_URL`, `AUTHSEC_INTROSPECTION_URL` | Pinned to `https://prod.api.authsec.ai` endpoints |
 | Protected resource | `AUTHSEC_RESOURCE_URI`, `AUTHSEC_RESOURCE_NAME`, `AUTHSEC_RESOURCE_SERVER_ID` | URI must end in `/mcp` |
 | Resource credential | `AUTHSEC_INTROSPECTION_CLIENT_ID`, `AUTHSEC_INTROSPECTION_CLIENT_SECRET` | Server-side only |
 | Runtime policy | `AUTHSEC_POLICY_MODE`, `AUTHSEC_VALIDATION_MODE`, `AUTHSEC_PUBLISH_MANIFEST` | Must be `remote_required`, `jwt_and_introspect`, `true` |

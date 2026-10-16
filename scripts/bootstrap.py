@@ -157,7 +157,7 @@ async def _ensure_m2m(
 
 async def _run() -> int:
     load_project_env()
-    base_url = optional("AUTHSEC_ISSUER", "https://app.authsec.ai")
+    base_url = optional("AUTHSEC_ISSUER", "https://prod.api.authsec.ai")
     admin_token = required("AUTHSEC_ADMIN_TOKEN")
     expected_workspace = required("AUTHSEC_DEMO_WORKSPACE_ID")
     token_workspace = _admin_workspace(admin_token)

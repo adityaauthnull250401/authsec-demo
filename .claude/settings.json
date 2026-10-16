@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/pc/Desktop/authnull/sdk-authsec/packages/python-sdk/**)",
+      "Bash(echo \"---EXIT:$?---\")",
+      "Read(//Users/pc/Desktop/authnull/**)",
+      "Bash(echo \"EXIT:$?\")",
+      "Read(//Users/pc/authnull/sdk-authsec/packages/**)",
+      "Bash(git -C /Users/pc/Desktop/authsec-demo log --oneline -5)",
+      "Bash([ -d \"$SDK\" ])",
+      "Bash(SDK=/Users/pc/Desktop/authnull/sdk-authsec/packages/python-sdk/src/authsec_sdk; echo \"===identity __init__ exports===\"; grep -nE 'browser_login|def |class |Error|^from|^import' \"$SDK/identity/__init__.py\" | head -60)",
+      "Read(//Users/pc/Desktop/authnull/sdk-authsec/packages/python-sdk/src/authsec_sdk/identity/**)",
+      "Bash(python3 -c \"import langchain; print\\('lc', langchain.__version__\\)\")"
+    ]
+  }
+}

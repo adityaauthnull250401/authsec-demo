@@ -13,7 +13,7 @@ from typing import Final, Literal
 APP_NAME: Final = "GitHub MCP Demo"
 APP_SLUG: Final = "github_mcp_demo"
 RESOURCE_URI: Final = "https://mcp-demo.mcpauthz.com/mcp"
-ISSUER: Final = "https://app.authsec.ai"
+ISSUER: Final = "https://prod.api.authsec.ai"
 
 READ_SCOPE: Final = f"{APP_SLUG}:commits:read"
 README_SCOPE: Final = f"{APP_SLUG}:repo:read"
